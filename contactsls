@@ -21,6 +21,7 @@ import json
 import os
 import re
 import sqlite3
+import subprocess
 import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -139,8 +140,8 @@ the normal local source set.  In Zsh, press Tab after --db for its path.""",
                         help="read a specific AddressBook-v22.abcddb file; may be repeated")
     parser.add_argument("--timeline", type=Path, metavar="PATH", default=os.environ.get("CONTACTSLS_TIMELINE"),
                         help="Google Maps location-history.json; defaults to $CONTACTSLS_TIMELINE")
-    parser.add_argument("--location", choices=("summary", "place", "address", "city", "coordinates", "link"), default="summary",
-                        help="rendering for location (default: summary)")
+    parser.add_argument("--location", action="store_true",
+                        help="reverse-geocode matched coordinates with Apple Maps (sends them to Apple)")
     parser.add_argument("--location-window", type=int, default=30, metavar="MINUTES",
                         help="maximum Timeline offset used for a match (default: 30)")
     args = parser.parse_args()
@@ -237,6 +238,23 @@ def nearest_timeline_location(created: dt.datetime | None, locations: list[Timel
         if abs(delta) <= window:
             candidates.append(TimelineLocation(**{**location.__dict__, "delta": delta, "confidence": "medium" if location.kind != "point" else "low"}))
     return min(candidates, key=lambda item: abs(item.delta.total_seconds()), default=None)
+
+
+def reverse_geocode(contacts: list[Contact]) -> list[Contact]:
+    helper = Path(__file__).resolve().with_name("helpers") / "reverse-geocode.swift"
+    unique = {(contact.location.latitude, contact.location.longitude) for contact in contacts if contact.location}
+    payload = "".join(f"{latitude},{longitude}\n" for latitude, longitude in unique)
+    try:
+        result = subprocess.run(["swift", str(helper)], input=payload, text=True, capture_output=True, check=True)
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise ValueError(f"Apple reverse geocoding failed: {error}") from error
+    labels = {}
+    for line in result.stdout.splitlines():
+        coordinate_text, separator, label = line.partition("\t")
+        if separator:
+            latitude, longitude = coordinate_text.split(",", 1)
+            labels[(float(latitude), float(longitude))] = label
+    return [replace(contact, location=replace(contact.location, address=labels.get((contact.location.latitude, contact.location.longitude), ""))) if contact.location else contact for contact in contacts]
 
 
 def parse_fields(raw: str, parser: argparse.ArgumentParser) -> tuple[str, ...]:
@@ -414,7 +432,13 @@ def main() -> int:
             return 2
         window = dt.timedelta(minutes=args.location_window)
         contacts = [replace(contact, location=nearest_timeline_location(contact.created, locations, window)) for contact in contacts]
-    elif any(field in LOCATION_FIELDS for field in args.fields):
+        if args.location:
+            try:
+                contacts = reverse_geocode(contacts)
+            except ValueError as error:
+                print(f"error: {error}", file=sys.stderr)
+                return 2
+    elif args.location or any(field in LOCATION_FIELDS for field in args.fields):
         print("error: location fields require --timeline PATH or $CONTACTSLS_TIMELINE", file=sys.stderr)
         return 2
     if not args.include_unnamed:
@@ -424,9 +448,9 @@ def main() -> int:
     if not args.all:
         contacts = contacts[:args.limit]
     if args.format == "json":
-        print(json.dumps([{field: contact.value(field, args.location) for field in args.fields} for contact in contacts], indent=2))
+        print(json.dumps([{field: contact.value(field) for field in args.fields} for contact in contacts], indent=2))
     else:
-        emit_table(contacts, args.fields, "\t" if args.format == "tsv" else "", args.location)
+        emit_table(contacts, args.fields, "\t" if args.format == "tsv" else "", "summary")
     return 0
 
 

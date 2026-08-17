@@ -59,7 +59,7 @@ contactsls --fields name,location,location_time,location_delta
 | `location_time`, `location_delta` | Start of the matched Timeline event and its offset from contact creation; a covering event reports `during visit` or `during activity`. |
 | `location_confidence`, `location_kind` | `high` for a covering visit; `medium` for activity or nearby visit; `low` for a nearby raw point. |
 | `location_coordinates`, `location_link` | Exact coordinates or a Google Maps link, available only on explicit request. |
-| `--location summary\|place\|address\|city\|coordinates\|link` | Controls the `location` rendering. |
+| `--location` | Reverse-geocode matched coordinates with Apple Maps. This sends those coordinates to Apple; without it, `location` stays local coordinates only. |
 | `--location-window MINUTES` | Maximum offset for a nearby match; default 30 minutes. |
 
 Run `contactsls --help` for the same information with examples.

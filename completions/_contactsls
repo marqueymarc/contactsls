@@ -22,7 +22,7 @@ _contactsls() {
     '--include-unnamed[include contacts without a visible name or organization]' \
     '*--db[Contacts database to read]:Contacts database:_contactsls_databases' \
     '--timeline[Google Maps location-history.json]:Timeline file:_files' \
-    '--location[location rendering]:style:(summary place address city coordinates link)' \
+    '--location[reverse-geocode matched coordinates with Apple Maps]' \
     '--location-window[maximum Timeline offset]:minutes:'
 }
 
