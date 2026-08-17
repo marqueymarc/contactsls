@@ -21,7 +21,7 @@ It opens the local SQLite databases in read-only mode. It does not automate Cont
 brew install marqueymarc/tap/contactsls
 ```
 
-Homebrew installs the command and its Apple Core Location reverse-geocoding helper. It is intended for macOS.
+Homebrew installs the command and a compiled Apple Core Location reverse-geocoding helper. It is intended for macOS.
 
 ### From source
 
@@ -39,4 +39,4 @@ Make sure `~/.local/bin` is in `PATH`, and add `~/.zfunc` to Zsh's `fpath` befor
 
 The Contacts adapter is macOS-specific: it discovers the per-source Contacts Core Data SQLite stores under `~/Library/Application Support/AddressBook/Sources/` and opens them with SQLite `mode=ro`. Those internal schemas can change with macOS, so `contactsls` intentionally discovers the relevant entities and columns at runtime.
 
-`--timeline` reads a Google Timeline export from disk; it does not upload the file. `--location` is the sole networked operation: it asks Apple to reverse-geocode the coordinates matched from that local export. The rest of the command, including normal contact listing, stays local and read-only.
+`--timeline` reads a Google Timeline export from disk; it does not upload the file. `--location` is the sole networked operation: it asks Apple to reverse-geocode the coordinates matched from that local export. The rest of the command, including normal contact listing, stays local and read-only. Source installations need the `swift` command for `--location`; the Homebrew formula compiles that helper during installation.

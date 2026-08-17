@@ -68,7 +68,7 @@ Run `contactsls --help` for the same information with examples.
 
 `contactsls` reads the Contacts Core Data SQLite stores that macOS keeps under `~/Library/Application Support/AddressBook/Sources/`. This is an internal macOS data format, not a public Apple API; the command discovers the available schema at runtime and opens each database using SQLite read-only mode.
 
-The optional `--location` switch runs the bundled Swift/Core Location helper. It sends the matched coordinates to Apple's reverse-geocoding service and therefore may require network access. Without that flag, the command does not make network requests: Contacts data and the Google Timeline export remain local.
+The optional `--location` switch runs the bundled Swift/Core Location helper. It sends the matched coordinates to Apple's reverse-geocoding service and therefore may require network access. Without that flag, the command does not make network requests: Contacts data and the Google Timeline export remain local. A source installation needs the `swift` command for this option; the Homebrew formula compiles the helper during installation.
 
 ## Homebrew installation
 

@@ -241,11 +241,14 @@ def nearest_timeline_location(created: dt.datetime | None, locations: list[Timel
 
 
 def reverse_geocode(contacts: list[Contact]) -> list[Contact]:
-    helper = Path(__file__).resolve().with_name("helpers") / "reverse-geocode.swift"
+    root = Path(__file__).resolve().parent
+    source_helper = root / "helpers" / "reverse-geocode.swift"
+    packaged_helper = root.parent / "libexec" / "reverse-geocode"
+    command = [str(packaged_helper)] if packaged_helper.is_file() else ["swift", str(source_helper)]
     unique = {(contact.location.latitude, contact.location.longitude) for contact in contacts if contact.location}
     payload = "".join(f"{latitude},{longitude}\n" for latitude, longitude in unique)
     try:
-        result = subprocess.run(["swift", str(helper)], input=payload, text=True, capture_output=True, check=True)
+        result = subprocess.run(command, input=payload, text=True, capture_output=True, check=True)
     except (OSError, subprocess.CalledProcessError) as error:
         raise ValueError(f"Apple reverse geocoding failed: {error}") from error
     labels = {}
