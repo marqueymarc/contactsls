@@ -43,6 +43,8 @@ contactsls --sort created --oldest
 
 Supply an exported Google Maps `location-history.json` file with `--timeline PATH`, or set `CONTACTSLS_TIMELINE` to its path. The file is read locally; the command makes no network requests. Location fields are intentionally estimates of where **you** were when the contact was created, not assertions about where you met.
 
+The importer supports both the current iPhone top-level segment-array export and older exports wrapped in `semanticSegments`. Timeline exports may contain only coordinates and Google place IDs; when no human-readable place name or address is present, the summary deliberately says `near <coordinates>` rather than inventing one.
+
 ```sh
 contactsls --timeline ~/Downloads/location-history.json \
   --fields name,created,estimated_added_location,location_confidence
@@ -54,8 +56,8 @@ contactsls --fields name,estimated_added_location,location_time,location_delta
 | Field or option | Meaning |
 | --- | --- |
 | `estimated_added_location` | Summary by default: best available name/address/city or coordinates, plus time delta. |
-| `location_time`, `location_delta` | Timestamp of the matched Timeline event and its offset from contact creation. |
-| `location_confidence`, `location_kind` | `high` for a covering visit; `medium` for a nearby visit/activity; `low` for a nearby raw point. |
+| `location_time`, `location_delta` | Start of the matched Timeline event and its offset from contact creation; a covering event reports `during visit` or `during activity`. |
+| `location_confidence`, `location_kind` | `high` for a covering visit; `medium` for activity or nearby visit; `low` for a nearby raw point. |
 | `location_coordinates`, `location_link` | Exact coordinates or a Google Maps link, available only on explicit request. |
 | `--location summary\|place\|address\|city\|coordinates\|link` | Controls the `estimated_added_location` rendering. |
 | `--location-window MINUTES` | Maximum offset for a nearby match; default 30 minutes. |

@@ -71,12 +71,14 @@ class TimelineLocation:
     city: str = ""
     kind: str = "point"
     confidence: str = "medium"
-    delta: dt.timedelta = dt.timedelta()
+    delta: dt.timedelta | None = dt.timedelta()
 
     def value(self, field: str, style: str) -> str:
         if field == "location_time":
             return self.start.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
         if field == "location_delta":
+            if self.delta is None:
+                return f"during {self.kind}"
             seconds = round(abs(self.delta.total_seconds()))
             return f"{seconds // 60} min {'after' if self.delta.total_seconds() > 0 else 'before'} added"
         if field == "location_confidence":
@@ -165,6 +167,10 @@ def timeline_timestamp(value: object) -> dt.datetime | None:
 
 
 def coordinate(value: object) -> tuple[float, float] | None:
+    if isinstance(value, str):
+        match = re.fullmatch(r"geo:([+-]?\d+(?:\.\d+)?),([+-]?\d+(?:\.\d+)?)", value)
+        if match:
+            return float(match.group(1)), float(match.group(2))
     if not isinstance(value, dict):
         return None
     latitude = value.get("latitudeE7", value.get("latitude", value.get("lat")))
@@ -196,7 +202,9 @@ def timeline_locations(path: Path) -> list[TimelineLocation]:
         payload = json.loads(path.expanduser().read_text())
     except (OSError, json.JSONDecodeError) as error:
         raise ValueError(f"cannot read Timeline file {path}: {error}") from error
-    segments = payload.get("semanticSegments", []) if isinstance(payload, dict) else []
+    # Current iPhone exports are a top-level segment array; older exports wrap
+    # the same data in semanticSegments and may additionally contain locations.
+    segments = payload.get("semanticSegments", []) if isinstance(payload, dict) else payload if isinstance(payload, list) else []
     raw_locations = payload.get("locations", []) if isinstance(payload, dict) else []
     locations: list[TimelineLocation] = []
     for segment in segments:
@@ -224,7 +232,8 @@ def nearest_timeline_location(created: dt.datetime | None, locations: list[Timel
     candidates: list[TimelineLocation] = []
     for location in locations:
         if location.end and location.start <= created <= location.end:
-            return TimelineLocation(**{**location.__dict__, "delta": dt.timedelta(), "confidence": "high"})
+            confidence = "high" if location.kind == "visit" else "medium"
+            return TimelineLocation(**{**location.__dict__, "delta": None, "confidence": confidence})
         delta = location.start - created
         if abs(delta) <= window:
             candidates.append(TimelineLocation(**{**location.__dict__, "delta": delta, "confidence": "medium" if location.kind != "point" else "low"}))
