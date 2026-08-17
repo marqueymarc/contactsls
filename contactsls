@@ -1,0 +1,264 @@
+#!/usr/bin/env python3
+"""Read and print macOS Contacts without changing the Contacts database.
+
+Examples:
+  contactsls
+  contactsls --sort modified --limit 25 --fields name,modified,emails
+  contactsls --match marc --details --format json
+  contactsls --sort name --all --fields name,phones
+
+The macOS Contacts store is an implementation detail, so the tool discovers the
+contact entity and available columns in each database instead of assuming a
+fixed schema.  Every connection is opened with SQLite's read-only mode.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import datetime as dt
+import json
+import re
+import sqlite3
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable
+
+
+CONTACTS_ROOT = Path.home() / "Library/Application Support/AddressBook/Sources"
+CORE_DATA_EPOCH = dt.datetime(2001, 1, 1, tzinfo=dt.timezone.utc)
+DEFAULT_FIELDS = ("name", "created")
+DETAIL_FIELDS = ("name", "created", "modified", "organization", "emails", "phones", "source")
+VALID_FIELDS = set(DETAIL_FIELDS)
+
+
+@dataclass(frozen=True)
+class Contact:
+    name: str
+    created: dt.datetime | None
+    modified: dt.datetime | None
+    organization: str
+    emails: tuple[str, ...]
+    phones: tuple[str, ...]
+    source: str
+
+    def value(self, field: str) -> str:
+        raw = getattr(self, field)
+        if isinstance(raw, dt.datetime):
+            return raw.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+        if raw is None:
+            return ""
+        if isinstance(raw, tuple):
+            return "; ".join(raw)
+        return raw
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="contactsls",
+        description="List contacts from local macOS Contacts databases (read-only).",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""Examples:
+  contactsls
+      Print the ten most recently created named contacts.
+  contactsls --sort modified -n 25 --fields name,modified,emails
+      Print the 25 most recently modified contacts with their email addresses.
+  contactsls --match "Dale Barnes" --details --format json
+      Find a contact and emit every supported field as JSON.
+  contactsls --sort name --all --fields name,phones
+      Print every named contact alphabetically with telephone numbers.
+
+The command reads each local Contacts source database in SQLite read-only mode.
+It does not use Contacts.app, sign in to a service, or change contact data.
+Use --db to inspect one specific AddressBook-v22.abcddb database instead of
+the normal local source set.  In Zsh, press Tab after --db for its path.""",
+    )
+    parser.add_argument("--sort", choices=("created", "modified", "name", "organization"), default="created",
+                        help="ordering criterion (default: created)")
+    parser.add_argument("-n", "--limit", type=int, default=10, help="number of contacts to print (default: 10)")
+    parser.add_argument("--all", action="store_true", help="print every matching contact; overrides --limit")
+    parser.add_argument("--oldest", action="store_true", help="reverse the default order for the selected sort")
+    parser.add_argument("--fields", default=",".join(DEFAULT_FIELDS),
+                        help="comma-separated columns: " + ", ".join(DETAIL_FIELDS))
+    parser.add_argument("--details", action="store_true", help="show all available contact fields")
+    parser.add_argument("--format", choices=("table", "tsv", "json"), default="table", help="output format")
+    parser.add_argument("--match", metavar="TEXT", help="case-insensitive match against name, organization, email, or phone")
+    parser.add_argument("--include-unnamed", action="store_true", help="include contacts with no name or organization")
+    parser.add_argument("--db", action="append", type=Path, metavar="PATH",
+                        help="read a specific AddressBook-v22.abcddb file; may be repeated")
+    args = parser.parse_args()
+    if args.limit < 0:
+        parser.error("--limit must be zero or greater")
+    args.fields = parse_fields(",".join(DETAIL_FIELDS) if args.details else args.fields, parser)
+    return args
+
+
+def parse_fields(raw: str, parser: argparse.ArgumentParser) -> tuple[str, ...]:
+    fields = tuple(field.strip() for field in raw.split(",") if field.strip())
+    unknown = set(fields) - VALID_FIELDS
+    if unknown:
+        parser.error("unknown field(s): " + ", ".join(sorted(unknown)))
+    if not fields:
+        parser.error("--fields needs at least one field")
+    return fields
+
+
+def database_paths(explicit: list[Path] | None) -> list[Path]:
+    paths = explicit or sorted(CONTACTS_ROOT.glob("*/AddressBook-v22.abcddb"))
+    return [path.expanduser() for path in paths if path.is_file()]
+
+
+def open_readonly(path: Path) -> sqlite3.Connection:
+    # mode=ro allows SQLite to consult a current WAL without acquiring a write lock.
+    return sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+
+
+def columns(connection: sqlite3.Connection, table: str) -> set[str]:
+    return {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
+
+
+def contact_entity(connection: sqlite3.Connection) -> int | None:
+    try:
+        row = connection.execute("SELECT Z_ENT FROM Z_PRIMARYKEY WHERE Z_NAME = 'ABCDContact'").fetchone()
+    except sqlite3.DatabaseError:
+        return None
+    return row[0] if row else None
+
+
+def coredatetime(value: float | None) -> dt.datetime | None:
+    if value is None:
+        return None
+    return CORE_DATA_EPOCH + dt.timedelta(seconds=value)
+
+
+def labelled_values(connection: sqlite3.Connection, table: str, value_column: str, owner: int) -> tuple[str, ...]:
+    table_columns = columns(connection, table)
+    if value_column not in table_columns:
+        return ()
+    owner_columns = [column for column in ("ZOWNER", "Z22_OWNER") if column in table_columns]
+    if not owner_columns:
+        return ()
+    where = " OR ".join(f"{column} = ?" for column in owner_columns)
+    ordering = "ZORDERINGINDEX, Z_PK" if "ZORDERINGINDEX" in table_columns else "Z_PK"
+    label_column = "ZLABEL" if "ZLABEL" in table_columns else "NULL"
+    query = f"SELECT {label_column}, {value_column} FROM {table} WHERE {where} ORDER BY {ordering}"
+    try:
+        rows = connection.execute(query, [owner] * len(owner_columns))
+    except sqlite3.DatabaseError:
+        return ()
+    values: list[str] = []
+    for label, value in rows:
+        if not value:
+            continue
+        rendered = str(value)
+        if label:
+            rendered = f"{normalise_label(str(label))}: {rendered}"
+        if rendered not in values:
+            values.append(rendered)
+    return tuple(values)
+
+
+def normalise_label(label: str) -> str:
+    """Turn Apple's _$!<Mobile>!$_ labels into ordinary CLI text."""
+    match = re.fullmatch(r"_\$!<(.+)>!\$_", label)
+    return match.group(1).lower() if match else label
+
+
+def read_database(path: Path) -> Iterable[Contact]:
+    try:
+        connection = open_readonly(path)
+    except sqlite3.Error as error:
+        print(f"warning: cannot read {path}: {error}", file=sys.stderr)
+        return
+    with connection:
+        record_columns = columns(connection, "ZABCDRECORD")
+        entity = contact_entity(connection)
+        required = {"Z_PK", "Z_ENT"}
+        if entity is None or not required <= record_columns:
+            return
+        def field(column: str) -> str:
+            return column if column in record_columns else "NULL"
+        query = f"""
+            SELECT Z_PK, {field('ZFIRSTNAME')}, {field('ZLASTNAME')}, {field('ZNAME')},
+                   {field('ZORGANIZATION')}, {field('ZCREATIONDATE')}, {field('ZMODIFICATIONDATE')}
+            FROM ZABCDRECORD
+            WHERE Z_ENT = ?
+        """
+        for identifier, first, last, name, organization, created, modified in connection.execute(query, (entity,)):
+            organization = (organization or "").strip()
+            display_name = " ".join(part.strip() for part in (first or "", last or "", name or "") if part and part.strip())
+            # Companies commonly have only an organization field; give those a
+            # useful primary label instead of printing a blank name column.
+            display_name = display_name or organization
+            yield Contact(
+                name=display_name,
+                created=coredatetime(created),
+                modified=coredatetime(modified),
+                organization=organization,
+                emails=labelled_values(connection, "ZABCDEMAILADDRESS", "ZADDRESS", identifier),
+                phones=labelled_values(connection, "ZABCDPHONENUMBER", "ZFULLNUMBER", identifier),
+                source=path.parent.name,
+            )
+
+
+def sort_contacts(contacts: list[Contact], criterion: str, oldest: bool) -> list[Contact]:
+    if criterion in {"created", "modified"}:
+        # Missing dates sort last when newest-first, first when --oldest is requested.
+        key = lambda contact: (getattr(contact, criterion) is not None, getattr(contact, criterion) or CORE_DATA_EPOCH, contact.name.casefold())
+        return sorted(contacts, key=key, reverse=not oldest)
+    key = lambda contact: (getattr(contact, criterion).casefold(), contact.name.casefold())
+    return sorted(contacts, key=key, reverse=oldest)
+
+
+def matches(contact: Contact, text: str | None) -> bool:
+    if not text:
+        return True
+    haystack = "\n".join((contact.name, contact.organization, *contact.emails, *contact.phones)).casefold()
+    return text.casefold() in haystack
+
+
+def has_visible_identity(contact: Contact) -> bool:
+    return any(character.isprintable() and not character.isspace()
+               for value in (contact.name, contact.organization) for character in value)
+
+
+def emit_table(rows: list[Contact], fields: tuple[str, ...], delimiter: str) -> None:
+    rendered = [[contact.value(field) for field in fields] for contact in rows]
+    if delimiter:
+        writer = csv.writer(sys.stdout, delimiter=delimiter, lineterminator="\n")
+        writer.writerow(fields)
+        writer.writerows(rendered)
+        return
+    widths = [len(field) for field in fields]
+    for row in rendered:
+        for index, value in enumerate(row):
+            widths[index] = max(widths[index], len(value))
+    print("  ".join(field.upper().ljust(widths[index]) for index, field in enumerate(fields)))
+    print("  ".join("-" * width for width in widths))
+    for row in rendered:
+        print("  ".join(value.ljust(widths[index]) for index, value in enumerate(row)))
+
+
+def main() -> int:
+    args = parse_args()
+    paths = database_paths(args.db)
+    if not paths:
+        print("No AddressBook-v22.abcddb source databases found.", file=sys.stderr)
+        return 1
+    contacts = [contact for path in paths for contact in read_database(path)]
+    if not args.include_unnamed:
+        contacts = [contact for contact in contacts if has_visible_identity(contact)]
+    contacts = [contact for contact in contacts if matches(contact, args.match)]
+    contacts = sort_contacts(contacts, args.sort, args.oldest)
+    if not args.all:
+        contacts = contacts[:args.limit]
+    if args.format == "json":
+        print(json.dumps([{field: contact.value(field) for field in args.fields} for contact in contacts], indent=2))
+    else:
+        emit_table(contacts, args.fields, "\t" if args.format == "tsv" else "")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

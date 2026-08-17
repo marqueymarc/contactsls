@@ -1,0 +1,26 @@
+#compdef contactsls
+
+_contactsls_fields() {
+  compadd -S , name created modified organization emails phones source
+}
+
+_contactsls_databases() {
+  local contacts_root="$HOME/Library/Application Support/AddressBook/Sources"
+  _path_files -W "$contacts_root" -g '*/AddressBook-v22.abcddb'
+}
+
+_contactsls() {
+  _arguments -s -S \
+    '(-n --limit)'{-n,--limit}'[number of contacts to print]:limit:' \
+    '--all[print every matching contact]' \
+    '--oldest[reverse the selected ordering]' \
+    '--sort[sort criterion]:sort criterion:(created modified name organization)' \
+    '--fields[comma-separated output fields]:field:_contactsls_fields' \
+    '--details[show every supported output field]' \
+    '--format[output format]:output format:(table tsv json)' \
+    '--match[case-insensitive contact filter]:text:' \
+    '--include-unnamed[include contacts without a visible name or organization]' \
+    '*--db[Contacts database to read]:Contacts database:_contactsls_databases'
+}
+
+_contactsls "$@"
