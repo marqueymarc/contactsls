@@ -32,12 +32,33 @@ contactsls --sort created --oldest
 | `-n`, `--limit N` | Print at most `N` contacts. The default is 10. |
 | `--all` | Print every matching contact, ignoring `--limit`. |
 | `--oldest` | Reverse the selected order. |
-| `--fields LIST` | Choose comma-separated output columns: `name`, `created`, `modified`, `organization`, `emails`, `phones`, `source`. |
-| `--details` | Shorthand for every available column. |
+| `--fields LIST` | Choose comma-separated output columns: `name`, `created`, `modified`, `organization`, `emails`, `phones`, `notes`, `source`, or a location field below. |
+| `--details` | Shorthand for all contact fields, including `notes`. |
 | `--format table\|tsv\|json` | Select human-readable, tab-separated, or JSON output. |
 | `--match TEXT` | Case-insensitive filter over name, organization, email, and phone data. |
 | `--include-unnamed` | Include records with no visible name or organization. |
 | `--db PATH` | Read one specified `AddressBook-v22.abcddb` database. It can be provided more than once. |
+
+## Estimated add location
+
+Supply an exported Google Maps `location-history.json` file with `--timeline PATH`, or set `CONTACTSLS_TIMELINE` to its path. The file is read locally; the command makes no network requests. Location fields are intentionally estimates of where **you** were when the contact was created, not assertions about where you met.
+
+```sh
+contactsls --timeline ~/Downloads/location-history.json \
+  --fields name,created,estimated_added_location,location_confidence
+
+export CONTACTSLS_TIMELINE=~/Downloads/location-history.json
+contactsls --fields name,estimated_added_location,location_time,location_delta
+```
+
+| Field or option | Meaning |
+| --- | --- |
+| `estimated_added_location` | Summary by default: best available name/address/city or coordinates, plus time delta. |
+| `location_time`, `location_delta` | Timestamp of the matched Timeline event and its offset from contact creation. |
+| `location_confidence`, `location_kind` | `high` for a covering visit; `medium` for a nearby visit/activity; `low` for a nearby raw point. |
+| `location_coordinates`, `location_link` | Exact coordinates or a Google Maps link, available only on explicit request. |
+| `--location summary\|place\|address\|city\|coordinates\|link` | Controls the `estimated_added_location` rendering. |
+| `--location-window MINUTES` | Maximum offset for a nearby match; default 30 minutes. |
 
 Run `contactsls --help` for the same information with examples.
 

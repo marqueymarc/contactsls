@@ -18,10 +18,11 @@ import argparse
 import csv
 import datetime as dt
 import json
+import os
 import re
 import sqlite3
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Iterable
 
@@ -29,8 +30,9 @@ from typing import Iterable
 CONTACTS_ROOT = Path.home() / "Library/Application Support/AddressBook/Sources"
 CORE_DATA_EPOCH = dt.datetime(2001, 1, 1, tzinfo=dt.timezone.utc)
 DEFAULT_FIELDS = ("name", "created")
-DETAIL_FIELDS = ("name", "created", "modified", "organization", "emails", "phones", "source")
-VALID_FIELDS = set(DETAIL_FIELDS)
+DETAIL_FIELDS = ("name", "created", "modified", "organization", "emails", "phones", "notes", "source")
+LOCATION_FIELDS = ("estimated_added_location", "location_time", "location_delta", "location_confidence", "location_kind", "location_coordinates", "location_link")
+VALID_FIELDS = set(DETAIL_FIELDS + LOCATION_FIELDS)
 
 
 @dataclass(frozen=True)
@@ -41,9 +43,13 @@ class Contact:
     organization: str
     emails: tuple[str, ...]
     phones: tuple[str, ...]
+    notes: str
     source: str
+    location: "TimelineLocation | None" = None
 
-    def value(self, field: str) -> str:
+    def value(self, field: str, location_style: str = "summary") -> str:
+        if field in LOCATION_FIELDS:
+            return self.location.value(field, location_style) if self.location else ""
         raw = getattr(self, field)
         if isinstance(raw, dt.datetime):
             return raw.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
@@ -52,6 +58,49 @@ class Contact:
         if isinstance(raw, tuple):
             return "; ".join(raw)
         return raw
+
+
+@dataclass(frozen=True)
+class TimelineLocation:
+    start: dt.datetime
+    end: dt.datetime | None
+    latitude: float
+    longitude: float
+    name: str = ""
+    address: str = ""
+    city: str = ""
+    kind: str = "point"
+    confidence: str = "medium"
+    delta: dt.timedelta = dt.timedelta()
+
+    def value(self, field: str, style: str) -> str:
+        if field == "location_time":
+            return self.start.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+        if field == "location_delta":
+            seconds = round(abs(self.delta.total_seconds()))
+            return f"{seconds // 60} min {'after' if self.delta.total_seconds() > 0 else 'before'} added"
+        if field == "location_confidence":
+            return self.confidence
+        if field == "location_kind":
+            return self.kind
+        if field == "location_coordinates":
+            return f"{self.latitude:.6f}, {self.longitude:.6f}"
+        if field == "location_link":
+            return f"https://maps.google.com/?q={self.latitude:.6f},{self.longitude:.6f}"
+        if field == "estimated_added_location":
+            if style == "coordinates":
+                return self.value("location_coordinates", style)
+            if style == "link":
+                return self.value("location_link", style)
+            if style == "place":
+                return self.name
+            if style == "address":
+                return self.address or self.name
+            if style == "city":
+                return self.city
+            label = self.name or self.address or self.city or f"near {self.value('location_coordinates', style)}"
+            return f"{label} · {self.value('location_delta', style)}"
+        return ""
 
 
 def parse_args() -> argparse.Namespace:
@@ -80,18 +129,106 @@ the normal local source set.  In Zsh, press Tab after --db for its path.""",
     parser.add_argument("--all", action="store_true", help="print every matching contact; overrides --limit")
     parser.add_argument("--oldest", action="store_true", help="reverse the default order for the selected sort")
     parser.add_argument("--fields", default=",".join(DEFAULT_FIELDS),
-                        help="comma-separated columns: " + ", ".join(DETAIL_FIELDS))
+                        help="comma-separated columns: " + ", ".join(DETAIL_FIELDS + LOCATION_FIELDS))
     parser.add_argument("--details", action="store_true", help="show all available contact fields")
     parser.add_argument("--format", choices=("table", "tsv", "json"), default="table", help="output format")
     parser.add_argument("--match", metavar="TEXT", help="case-insensitive match against name, organization, email, or phone")
     parser.add_argument("--include-unnamed", action="store_true", help="include contacts with no name or organization")
     parser.add_argument("--db", action="append", type=Path, metavar="PATH",
                         help="read a specific AddressBook-v22.abcddb file; may be repeated")
+    parser.add_argument("--timeline", type=Path, metavar="PATH", default=os.environ.get("CONTACTSLS_TIMELINE"),
+                        help="Google Maps location-history.json; defaults to $CONTACTSLS_TIMELINE")
+    parser.add_argument("--location", choices=("summary", "place", "address", "city", "coordinates", "link"), default="summary",
+                        help="rendering for estimated_added_location (default: summary)")
+    parser.add_argument("--location-window", type=int, default=30, metavar="MINUTES",
+                        help="maximum Timeline offset used for a match (default: 30)")
     args = parser.parse_args()
     if args.limit < 0:
         parser.error("--limit must be zero or greater")
+    if args.location_window < 0:
+        parser.error("--location-window must be zero or greater")
     args.fields = parse_fields(",".join(DETAIL_FIELDS) if args.details else args.fields, parser)
     return args
+
+
+def timeline_timestamp(value: object) -> dt.datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return dt.datetime.fromtimestamp(value / (1000 if value > 10_000_000_000 else 1), tz=dt.timezone.utc)
+    if isinstance(value, str):
+        try:
+            return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return None
+
+
+def coordinate(value: object) -> tuple[float, float] | None:
+    if not isinstance(value, dict):
+        return None
+    latitude = value.get("latitudeE7", value.get("latitude", value.get("lat")))
+    longitude = value.get("longitudeE7", value.get("longitude", value.get("lng", value.get("lon"))))
+    if isinstance(latitude, (int, float)) and isinstance(longitude, (int, float)):
+        latitude = latitude / 10_000_000 if abs(latitude) > 180 else latitude
+        longitude = longitude / 10_000_000 if abs(longitude) > 180 else longitude
+        if -90 <= latitude <= 90 and -180 <= longitude <= 180:
+            return float(latitude), float(longitude)
+    for nested in value.values():
+        found = coordinate(nested)
+        if found:
+            return found
+    return None
+
+
+def text_value(value: object, keys: tuple[str, ...]) -> str:
+    if not isinstance(value, dict):
+        return ""
+    for key in keys:
+        candidate = value.get(key)
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    return ""
+
+
+def timeline_locations(path: Path) -> list[TimelineLocation]:
+    try:
+        payload = json.loads(path.expanduser().read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"cannot read Timeline file {path}: {error}") from error
+    segments = payload.get("semanticSegments", []) if isinstance(payload, dict) else []
+    raw_locations = payload.get("locations", []) if isinstance(payload, dict) else []
+    locations: list[TimelineLocation] = []
+    for segment in segments:
+        if not isinstance(segment, dict):
+            continue
+        kind, details = next(((kind, value) for kind, value in (("visit", segment.get("visit")), ("activity", segment.get("activity"))) if isinstance(value, dict)), ("segment", segment))
+        point = coordinate(details) or coordinate(segment)
+        start = timeline_timestamp(segment.get("startTime") or details.get("startTime"))
+        end = timeline_timestamp(segment.get("endTime") or details.get("endTime"))
+        if point and start:
+            locations.append(TimelineLocation(start, end, *point, text_value(details, ("name", "placeName")), text_value(details, ("address", "formattedAddress")), text_value(details, ("city", "locality")), kind, "high" if kind == "visit" else "medium"))
+    for point_data in raw_locations:
+        if not isinstance(point_data, dict):
+            continue
+        point, moment = coordinate(point_data), timeline_timestamp(point_data.get("timestampMs") or point_data.get("timestamp"))
+        if point and moment:
+            locations.append(TimelineLocation(moment, None, *point))
+    return locations
+
+
+def nearest_timeline_location(created: dt.datetime | None, locations: list[TimelineLocation], window: dt.timedelta) -> TimelineLocation | None:
+    if not created:
+        return None
+    created = created.astimezone(dt.timezone.utc)
+    candidates: list[TimelineLocation] = []
+    for location in locations:
+        if location.end and location.start <= created <= location.end:
+            return TimelineLocation(**{**location.__dict__, "delta": dt.timedelta(), "confidence": "high"})
+        delta = location.start - created
+        if abs(delta) <= window:
+            candidates.append(TimelineLocation(**{**location.__dict__, "delta": delta, "confidence": "medium" if location.kind != "point" else "low"}))
+    return min(candidates, key=lambda item: abs(item.delta.total_seconds()), default=None)
 
 
 def parse_fields(raw: str, parser: argparse.ArgumentParser) -> tuple[str, ...]:
@@ -159,6 +296,19 @@ def labelled_values(connection: sqlite3.Connection, table: str, value_column: st
     return tuple(values)
 
 
+def contact_notes(connection: sqlite3.Connection, owner: int) -> str:
+    note_columns = columns(connection, "ZABCDNOTE")
+    contact_columns = [column for column in ("ZCONTACT", "Z22_CONTACT") if column in note_columns]
+    if "ZTEXT" not in note_columns or not contact_columns:
+        return ""
+    query = "SELECT ZTEXT FROM ZABCDNOTE WHERE " + " OR ".join(f"{column} = ?" for column in contact_columns)
+    try:
+        values = [row[0].strip() for row in connection.execute(query, [owner] * len(contact_columns)) if row[0] and row[0].strip()]
+    except sqlite3.DatabaseError:
+        return ""
+    return "\n".join(dict.fromkeys(values))
+
+
 def normalise_label(label: str) -> str:
     """Turn Apple's _$!<Mobile>!$_ labels into ordinary CLI text."""
     match = re.fullmatch(r"_\$!<(.+)>!\$_", label)
@@ -198,6 +348,7 @@ def read_database(path: Path) -> Iterable[Contact]:
                 organization=organization,
                 emails=labelled_values(connection, "ZABCDEMAILADDRESS", "ZADDRESS", identifier),
                 phones=labelled_values(connection, "ZABCDPHONENUMBER", "ZFULLNUMBER", identifier),
+                notes=contact_notes(connection, identifier),
                 source=path.parent.name,
             )
 
@@ -223,8 +374,8 @@ def has_visible_identity(contact: Contact) -> bool:
                for value in (contact.name, contact.organization) for character in value)
 
 
-def emit_table(rows: list[Contact], fields: tuple[str, ...], delimiter: str) -> None:
-    rendered = [[contact.value(field) for field in fields] for contact in rows]
+def emit_table(rows: list[Contact], fields: tuple[str, ...], delimiter: str, location_style: str) -> None:
+    rendered = [[contact.value(field, location_style) for field in fields] for contact in rows]
     if delimiter:
         writer = csv.writer(sys.stdout, delimiter=delimiter, lineterminator="\n")
         writer.writerow(fields)
@@ -247,6 +398,17 @@ def main() -> int:
         print("No AddressBook-v22.abcddb source databases found.", file=sys.stderr)
         return 1
     contacts = [contact for path in paths for contact in read_database(path)]
+    if args.timeline:
+        try:
+            locations = timeline_locations(args.timeline)
+        except ValueError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 2
+        window = dt.timedelta(minutes=args.location_window)
+        contacts = [replace(contact, location=nearest_timeline_location(contact.created, locations, window)) for contact in contacts]
+    elif any(field in LOCATION_FIELDS for field in args.fields):
+        print("error: location fields require --timeline PATH or $CONTACTSLS_TIMELINE", file=sys.stderr)
+        return 2
     if not args.include_unnamed:
         contacts = [contact for contact in contacts if has_visible_identity(contact)]
     contacts = [contact for contact in contacts if matches(contact, args.match)]
@@ -254,9 +416,9 @@ def main() -> int:
     if not args.all:
         contacts = contacts[:args.limit]
     if args.format == "json":
-        print(json.dumps([{field: contact.value(field) for field in args.fields} for contact in contacts], indent=2))
+        print(json.dumps([{field: contact.value(field, args.location) for field in args.fields} for contact in contacts], indent=2))
     else:
-        emit_table(contacts, args.fields, "\t" if args.format == "tsv" else "")
+        emit_table(contacts, args.fields, "\t" if args.format == "tsv" else "", args.location)
     return 0
 
 
