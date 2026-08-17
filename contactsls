@@ -31,7 +31,7 @@ CONTACTS_ROOT = Path.home() / "Library/Application Support/AddressBook/Sources"
 CORE_DATA_EPOCH = dt.datetime(2001, 1, 1, tzinfo=dt.timezone.utc)
 DEFAULT_FIELDS = ("name", "created")
 DETAIL_FIELDS = ("name", "created", "modified", "organization", "emails", "phones", "notes", "source")
-LOCATION_FIELDS = ("estimated_added_location", "location_time", "location_delta", "location_confidence", "location_kind", "location_coordinates", "location_link")
+LOCATION_FIELDS = ("location", "location_time", "location_delta", "location_confidence", "location_kind", "location_coordinates", "location_link")
 VALID_FIELDS = set(DETAIL_FIELDS + LOCATION_FIELDS)
 
 
@@ -89,7 +89,7 @@ class TimelineLocation:
             return f"{self.latitude:.6f}, {self.longitude:.6f}"
         if field == "location_link":
             return f"https://maps.google.com/?q={self.latitude:.6f},{self.longitude:.6f}"
-        if field == "estimated_added_location":
+        if field == "location":
             if style == "coordinates":
                 return self.value("location_coordinates", style)
             if style == "link":
@@ -100,8 +100,7 @@ class TimelineLocation:
                 return self.address or self.name
             if style == "city":
                 return self.city
-            label = self.name or self.address or self.city or f"near {self.value('location_coordinates', style)}"
-            return f"{label} · {self.value('location_delta', style)}"
+            return self.name or self.address or self.city or self.value("location_coordinates", style)
         return ""
 
 
@@ -141,7 +140,7 @@ the normal local source set.  In Zsh, press Tab after --db for its path.""",
     parser.add_argument("--timeline", type=Path, metavar="PATH", default=os.environ.get("CONTACTSLS_TIMELINE"),
                         help="Google Maps location-history.json; defaults to $CONTACTSLS_TIMELINE")
     parser.add_argument("--location", choices=("summary", "place", "address", "city", "coordinates", "link"), default="summary",
-                        help="rendering for estimated_added_location (default: summary)")
+                        help="rendering for location (default: summary)")
     parser.add_argument("--location-window", type=int, default=30, metavar="MINUTES",
                         help="maximum Timeline offset used for a match (default: 30)")
     args = parser.parse_args()

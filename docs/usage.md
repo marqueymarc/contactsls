@@ -47,19 +47,19 @@ The importer supports both the current iPhone top-level segment-array export and
 
 ```sh
 contactsls --timeline ~/Downloads/location-history.json \
-  --fields name,created,estimated_added_location,location_confidence
+  --fields name,created,location,location_confidence
 
 export CONTACTSLS_TIMELINE=~/Downloads/location-history.json
-contactsls --fields name,estimated_added_location,location_time,location_delta
+contactsls --fields name,location,location_time,location_delta
 ```
 
 | Field or option | Meaning |
 | --- | --- |
-| `estimated_added_location` | Summary by default: best available name/address/city or coordinates, plus time delta. |
+| `location` | Coordinates by default; a readable place/address when one is present in the Timeline data. |
 | `location_time`, `location_delta` | Start of the matched Timeline event and its offset from contact creation; a covering event reports `during visit` or `during activity`. |
 | `location_confidence`, `location_kind` | `high` for a covering visit; `medium` for activity or nearby visit; `low` for a nearby raw point. |
 | `location_coordinates`, `location_link` | Exact coordinates or a Google Maps link, available only on explicit request. |
-| `--location summary\|place\|address\|city\|coordinates\|link` | Controls the `estimated_added_location` rendering. |
+| `--location summary\|place\|address\|city\|coordinates\|link` | Controls the `location` rendering. |
 | `--location-window MINUTES` | Maximum offset for a nearby match; default 30 minutes. |
 
 Run `contactsls --help` for the same information with examples.

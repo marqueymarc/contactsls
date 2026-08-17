@@ -8,7 +8,7 @@ contactsls --sort modified -n 25 --fields name,modified,emails
 contactsls --match "Dale Barnes" --details --format json
 contactsls --sort name --all --fields name,phones
 contactsls --timeline ~/Downloads/location-history.json \
-  --fields name,created,estimated_added_location
+  --fields name,created,location
 ```
 
 It opens the local SQLite databases in read-only mode. It does not automate Contacts.app, sign in to a service, alter contact data, or use a network connection. An optional Google Timeline JSON file is read locally to estimate where you were when a contact was created. Read the [usage guide](docs/usage.md) for every option and the Zsh completion setup.

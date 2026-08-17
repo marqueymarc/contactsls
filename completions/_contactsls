@@ -1,7 +1,7 @@
 #compdef contactsls
 
 _contactsls_fields() {
-  compadd -S , name created modified organization emails phones notes source estimated_added_location location_time location_delta location_confidence location_kind location_coordinates location_link
+  compadd -S , name created modified organization emails phones notes source location location_time location_delta location_confidence location_kind location_coordinates location_link
 }
 
 _contactsls_databases() {
