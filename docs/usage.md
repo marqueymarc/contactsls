@@ -39,11 +39,11 @@ contactsls --sort created --oldest
 | `--include-unnamed` | Include records with no visible name or organization. |
 | `--db PATH` | Read one specified `AddressBook-v22.abcddb` database. It can be provided more than once. |
 
-## Estimated add location
+## Contact-creation location
 
-Supply an exported Google Maps `location-history.json` file with `--timeline PATH`, or set `CONTACTSLS_TIMELINE` to its path. The file is read locally; the command makes no network requests. Location fields are intentionally estimates of where **you** were when the contact was created, not assertions about where you met.
+Supply an exported Google Maps `location-history.json` file with `--timeline PATH`, or set `CONTACTSLS_TIMELINE` to its path. The file is read locally. Location fields describe where **you** were when the contact was created, not assertions about where you met.
 
-The importer supports both the current iPhone top-level segment-array export and older exports wrapped in `semanticSegments`. Timeline exports may contain only coordinates and Google place IDs; when no human-readable place name or address is present, the summary deliberately says `near <coordinates>` rather than inventing one.
+The importer supports both the current iPhone top-level segment-array export and older exports wrapped in `semanticSegments`. By default, `location` prints the matched coordinates. Add `--location` to reverse-geocode them into a readable place or address.
 
 ```sh
 contactsls --timeline ~/Downloads/location-history.json \
@@ -63,6 +63,20 @@ contactsls --fields name,location,location_time,location_delta
 | `--location-window MINUTES` | Maximum offset for a nearby match; default 30 minutes. |
 
 Run `contactsls --help` for the same information with examples.
+
+## macOS-specific behavior
+
+`contactsls` reads the Contacts Core Data SQLite stores that macOS keeps under `~/Library/Application Support/AddressBook/Sources/`. This is an internal macOS data format, not a public Apple API; the command discovers the available schema at runtime and opens each database using SQLite read-only mode.
+
+The optional `--location` switch runs the bundled Swift/Core Location helper. It sends the matched coordinates to Apple's reverse-geocoding service and therefore may require network access. Without that flag, the command does not make network requests: Contacts data and the Google Timeline export remain local.
+
+## Homebrew installation
+
+```sh
+brew install marqueymarc/tap/contactsls
+```
+
+The formula packages the command and its helper, but not Contacts data or Timeline exports. Use the source installation above if you want a checkout you can edit directly.
 
 ## Installation and completion
 
