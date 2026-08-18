@@ -45,4 +45,4 @@ The Contacts adapter is macOS-specific: it discovers the per-source Contacts Cor
 
 The project is MIT licensed and has a public site at <https://marqueymarc.github.io/contactsls/>. Every future `vX.Y.Z` tag validates the command, creates GitHub release notes, and can update the Homebrew formula. The cross-repository update needs a `HOMEBREW_TAP_TOKEN` repository secret with write access to `marqueymarc/homebrew-tap`; without it, the tap's scheduled updater remains the fallback.
 
-Release announcements are deliberately opt-in. Set `PROMOTE_MASTODON` and/or `PROMOTE_BLUESKY` repository variables to `true`, then add the corresponding documented repository variables and secrets before a release. The workflow otherwise does nothing—no social account is contacted by default.
+Release announcements are deliberately opt-in. Configure Mastodon, Bluesky, or a generic webhook (for services such as LinkedIn automation) using the [promotion guide](docs/promotion.md). The workflow otherwise does nothing—no social account is contacted by default.

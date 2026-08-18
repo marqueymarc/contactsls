@@ -61,3 +61,20 @@ jobs:
           record="$(jq -nc --arg did "$did" --arg text "$text" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{repo:$did,collection:"app.bsky.feed.post",record:{"$type":"app.bsky.feed.post",text:$text,createdAt:$now}}')"
           curl --fail --silent --show-error https://bsky.social/xrpc/com.atproto.repo.createRecord \
             -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d "$record"
+
+  webhook:
+    if: vars.PROMOTE_WEBHOOK == 'true'
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
+      RELEASE_URL: ${{ github.event_name == 'release' && github.event.release.html_url || '' }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+      PROMOTION_WEBHOOK_URL: ${{ secrets.PROMOTION_WEBHOOK_URL }}
+    steps:
+      - name: Send the release payload to an automation service
+        run: |
+          test -n "$PROMOTION_WEBHOOK_URL"
+          url="${RELEASE_URL:-https://github.com/marqueymarc/contactsls/releases/tag/$TAG}"
+          payload="$(jq -nc --arg project contactsls --arg tag "$TAG" --arg url "$url" --arg install "brew install marqueymarc/tap/contactsls" '{project:$project,tag:$tag,url:$url,install:$install}')"
+          if [[ "$DRY_RUN" == "true" ]]; then printf '%s\n' "$payload"; exit 0; fi
+          curl --fail --silent --show-error "$PROMOTION_WEBHOOK_URL" -H 'Content-Type: application/json' -d "$payload"
