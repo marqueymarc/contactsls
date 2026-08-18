@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Read-only command-line viewer for local macOS Contacts.">
+    <title>contactsls — local macOS Contacts, plainly listed</title>
+    <style>
+      :root { color-scheme: light; --ink: #17231e; --paper: #fbf8f0; --line: #d5d0c2; --green: #16624a; --sun: #e9c46a; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--paper); color: var(--ink); font: 18px/1.55 Georgia, serif; }
+      main { max-width: 960px; margin: auto; padding: 8vw 7vw; }
+      .eyebrow, code, pre, .button { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .eyebrow { color: var(--green); font-size: .78rem; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
+      h1 { font-size: clamp(3.6rem, 11vw, 8rem); letter-spacing: -.075em; line-height: .82; margin: .35rem 0 1.8rem; }
+      h2 { font-size: 1.55rem; margin: 3.5rem 0 .75rem; }
+      .lede { font-size: clamp(1.25rem, 2.2vw, 1.7rem); max-width: 37rem; }
+      pre { background: var(--ink); border-radius: 4px; color: #f7f3e8; margin: 2rem 0 1rem; overflow-x: auto; padding: 1rem 1.2rem; }
+      .button { background: var(--green); border-radius: 3px; color: white; display: inline-block; font-size: .9rem; font-weight: 700; padding: .7rem .9rem; text-decoration: none; }
+      .button:hover, .button:focus { background: #0e4836; outline: 3px solid var(--sun); outline-offset: 3px; }
+      .facts { border-top: 1px solid var(--line); display: grid; gap: 1.25rem; grid-template-columns: repeat(3, 1fr); margin-top: 4rem; padding-top: 1.25rem; }
+      .facts strong { display: block; font: 700 .78rem/1.3 ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; }
+      a { color: var(--green); text-underline-offset: .18em; }
+      footer { border-top: 1px solid var(--line); margin-top: 4rem; padding-top: 1.25rem; font-size: .92rem; }
+      @media (max-width: 620px) { .facts { grid-template-columns: 1fr; } }
+      @media (prefers-reduced-motion: no-preference) { main { animation: arrive .45s ease-out; } @keyframes arrive { from { opacity: 0; transform: translateY(10px); } } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="eyebrow">A small macOS utility</div>
+      <h1>contactsls</h1>
+      <p class="lede">A read-only command-line viewer for your local macOS Contacts—sorted by when they were created, edited, or named.</p>
+      <pre><code>brew install marqueymarc/tap/contactsls</code></pre>
+      <a class="button" href="https://github.com/marqueymarc/contactsls">View on GitHub</a>
+
+      <h2>Useful from the first command</h2>
+      <pre><code># The ten newest contacts
+contactsls
+
+# Find someone, including notes and contact details
+contactsls --match "Dale Barnes" --details
+
+# Associate a local Google Timeline export with creation times
+contactsls --timeline ~/Downloads/location-history.json \
+  --fields name,created,location</code></pre>
+
+      <div class="facts">
+        <div><strong>Local by default</strong>Reads Contacts and Timeline files from your Mac; it never changes them.</div>
+        <div><strong>Privacy-aware</strong>Apple reverse geocoding is explicit: use <code>--location</code> only when you want it.</div>
+        <div><strong>Open source</strong><a href="https://github.com/marqueymarc/contactsls/blob/main/LICENSE">MIT licensed</a>, with Zsh completion included.</div>
+      </div>
+
+      <footer>
+        Read the <a href="https://github.com/marqueymarc/contactsls/blob/main/docs/usage.md">usage guide</a>, see <a href="https://github.com/marqueymarc/contactsls/releases">releases</a>, or install with <a href="https://github.com/marqueymarc/homebrew-tap">Homebrew</a>.
+      </footer>
+    </main>
+  </body>
+</html>

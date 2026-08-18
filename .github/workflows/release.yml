@@ -1,0 +1,53 @@
+name: Release and update Homebrew
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish and sync
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    env:
+      TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - name: Validate the command
+        run: |
+          python3 -m py_compile contactsls
+          swiftc -typecheck helpers/reverse-geocode.swift
+          ./contactsls --help >/dev/null
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$TAG" --verify-tag --generate-notes || gh release view "$TAG"
+      - name: Update the Homebrew tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [[ -z "$TAP_TOKEN" ]]; then
+            echo "HOMEBREW_TAP_TOKEN is not configured; the tap's daily fallback will update the formula."
+            exit 0
+          fi
+          archive="https://github.com/marqueymarc/contactsls/archive/refs/tags/${TAG}.tar.gz"
+          curl --fail --location --silent --show-error "$archive" -o /tmp/contactsls.tar.gz
+          checksum="$(shasum -a 256 /tmp/contactsls.tar.gz | awk '{print $1}')"
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/marqueymarc/homebrew-tap.git" /tmp/homebrew-tap
+          python3 /tmp/homebrew-tap/scripts/update-contactsls-formula.py "$TAG" "$checksum"
+          cd /tmp/homebrew-tap
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/contactsls.rb
+          git commit -m "chore: update contactsls formula"
+          git push

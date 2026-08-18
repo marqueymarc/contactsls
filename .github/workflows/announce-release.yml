@@ -1,0 +1,63 @@
+name: Announce release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to announce
+        required: true
+        type: string
+      dry_run:
+        description: Print the post without publishing it
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  mastodon:
+    if: vars.PROMOTE_MASTODON == 'true'
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
+      RELEASE_URL: ${{ github.event_name == 'release' && github.event.release.html_url || '' }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+      MASTODON_BASE_URL: ${{ vars.MASTODON_BASE_URL }}
+      MASTODON_ACCESS_TOKEN: ${{ secrets.MASTODON_ACCESS_TOKEN }}
+    steps:
+      - name: Publish a concise release note
+        run: |
+          test -n "$MASTODON_BASE_URL" && test -n "$MASTODON_ACCESS_TOKEN"
+          url="${RELEASE_URL:-https://github.com/marqueymarc/contactsls/releases/tag/$TAG}"
+          text="contactsls $TAG — read-only macOS Contacts from the command line. Install: brew install marqueymarc/tap/contactsls $url"
+          if [[ "$DRY_RUN" == "true" ]]; then printf '%s\n' "$text"; exit 0; fi
+          curl --fail --silent --show-error "$MASTODON_BASE_URL/api/v1/statuses" \
+            -H "Authorization: Bearer $MASTODON_ACCESS_TOKEN" --data-urlencode "status=$text"
+
+  bluesky:
+    if: vars.PROMOTE_BLUESKY == 'true'
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
+      RELEASE_URL: ${{ github.event_name == 'release' && github.event.release.html_url || '' }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+      BLUESKY_HANDLE: ${{ vars.BLUESKY_HANDLE }}
+      BLUESKY_APP_PASSWORD: ${{ secrets.BLUESKY_APP_PASSWORD }}
+    steps:
+      - name: Publish a concise release note
+        run: |
+          test -n "$BLUESKY_HANDLE" && test -n "$BLUESKY_APP_PASSWORD"
+          url="${RELEASE_URL:-https://github.com/marqueymarc/contactsls/releases/tag/$TAG}"
+          text="contactsls $TAG — read-only macOS Contacts from the command line. Install: brew install marqueymarc/tap/contactsls $url"
+          if [[ "$DRY_RUN" == "true" ]]; then printf '%s\n' "$text"; exit 0; fi
+          session="$(curl --fail --silent --show-error https://bsky.social/xrpc/com.atproto.server.createSession \
+            -H 'Content-Type: application/json' -d "$(jq -nc --arg id "$BLUESKY_HANDLE" --arg pw "$BLUESKY_APP_PASSWORD" '{identifier:$id,password:$pw}')")"
+          token="$(jq -r .accessJwt <<<"$session")"
+          did="$(jq -r .did <<<"$session")"
+          record="$(jq -nc --arg did "$did" --arg text "$text" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{repo:$did,collection:"app.bsky.feed.post",record:{"$type":"app.bsky.feed.post",text:$text,createdAt:$now}}')"
+          curl --fail --silent --show-error https://bsky.social/xrpc/com.atproto.repo.createRecord \
+            -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d "$record"

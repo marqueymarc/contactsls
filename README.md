@@ -40,3 +40,9 @@ Make sure `~/.local/bin` is in `PATH`, and add `~/.zfunc` to Zsh's `fpath` befor
 The Contacts adapter is macOS-specific: it discovers the per-source Contacts Core Data SQLite stores under `~/Library/Application Support/AddressBook/Sources/` and opens them with SQLite `mode=ro`. Those internal schemas can change with macOS, so `contactsls` intentionally discovers the relevant entities and columns at runtime.
 
 `--timeline` reads a Google Timeline export from disk; it does not upload the file. `--location` is the sole networked operation: it asks Apple to reverse-geocode the coordinates matched from that local export. The rest of the command, including normal contact listing, stays local and read-only. Source installations need the `swift` command for `--location`; the Homebrew formula compiles that helper during installation.
+
+## Releases and visibility
+
+The project is MIT licensed and has a public site at <https://marqueymarc.github.io/contactsls/>. Every future `vX.Y.Z` tag validates the command, creates GitHub release notes, and can update the Homebrew formula. The cross-repository update needs a `HOMEBREW_TAP_TOKEN` repository secret with write access to `marqueymarc/homebrew-tap`; without it, the tap's scheduled updater remains the fallback.
+
+Release announcements are deliberately opt-in. Set `PROMOTE_MASTODON` and/or `PROMOTE_BLUESKY` repository variables to `true`, then add the corresponding documented repository variables and secrets before a release. The workflow otherwise does nothing—no social account is contacted by default.
