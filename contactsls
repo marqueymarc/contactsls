@@ -302,7 +302,8 @@ def labelled_values(connection: sqlite3.Connection, table: str, value_column: st
     table_columns = columns(connection, table)
     if value_column not in table_columns:
         return ()
-    owner_columns = [column for column in ("ZOWNER", "Z22_OWNER") if column in table_columns]
+    # Z22_OWNER is Core Data's destination entity discriminator, not an ID.
+    owner_columns = [column for column in ("ZOWNER",) if column in table_columns]
     if not owner_columns:
         return ()
     where = " OR ".join(f"{column} = ?" for column in owner_columns)
@@ -327,7 +328,7 @@ def labelled_values(connection: sqlite3.Connection, table: str, value_column: st
 
 def contact_notes(connection: sqlite3.Connection, owner: int) -> str:
     note_columns = columns(connection, "ZABCDNOTE")
-    contact_columns = [column for column in ("ZCONTACT", "Z22_CONTACT") if column in note_columns]
+    contact_columns = [column for column in ("ZCONTACT",) if column in note_columns]
     if "ZTEXT" not in note_columns or not contact_columns:
         return ""
     query = "SELECT ZTEXT FROM ZABCDNOTE WHERE " + " OR ".join(f"{column} = ?" for column in contact_columns)

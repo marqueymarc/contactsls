@@ -25,6 +25,7 @@ jobs:
       - name: Validate the command
         run: |
           python3 -m py_compile contactsls
+          python3 -m unittest discover -s tests -v
           swiftc -typecheck helpers/reverse-geocode.swift
           ./contactsls --help >/dev/null
       - name: Create the GitHub Release
