@@ -29,6 +29,7 @@ from typing import Iterable
 
 
 CONTACTS_ROOT = Path.home() / "Library/Application Support/AddressBook/Sources"
+VERSION = "1.0.3"
 CORE_DATA_EPOCH = dt.datetime(2001, 1, 1, tzinfo=dt.timezone.utc)
 DEFAULT_FIELDS = ("name", "created")
 DETAIL_FIELDS = ("name", "created", "modified", "organization", "emails", "phones", "notes", "source")
@@ -125,6 +126,7 @@ It does not use Contacts.app, sign in to a service, or change contact data.
 Use --db to inspect one specific AddressBook-v22.abcddb database instead of
 the normal local source set.  In Zsh, press Tab after --db for its path.""",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     parser.add_argument("--sort", choices=("created", "modified", "name", "organization"), default="created",
                         help="ordering criterion (default: created)")
     parser.add_argument("-n", "--limit", type=int, default=10, help="number of contacts to print (default: 10)")

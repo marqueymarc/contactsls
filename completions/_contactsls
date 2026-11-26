@@ -11,6 +11,7 @@ _contactsls_databases() {
 
 _contactsls() {
   _arguments -s -S \
+    '--version[show version and exit]' \
     '(-n --limit)'{-n,--limit}'[number of contacts to print]:limit:' \
     '--all[print every matching contact]' \
     '--oldest[reverse the selected ordering]' \

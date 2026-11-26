@@ -28,6 +28,7 @@ jobs:
           python3 -m unittest discover -s tests -v
           swiftc -typecheck helpers/reverse-geocode.swift
           ./contactsls --help >/dev/null
+          test "$(./contactsls --version)" = "contactsls ${TAG#v}"
       - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

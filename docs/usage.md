@@ -28,6 +28,7 @@ contactsls --sort created --oldest
 
 | Option | Meaning |
 | --- | --- |
+| `--version` | Print the installed version and exit. |
 | `--sort created\|modified\|name\|organization` | Select the sort criterion. Creation and modification dates are newest first by default; text sorts ascending. |
 | `-n`, `--limit N` | Print at most `N` contacts. The default is 10. |
 | `--all` | Print every matching contact, ignoring `--limit`. |
