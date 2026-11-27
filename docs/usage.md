@@ -2,7 +2,7 @@
 
 `contactsls` is a read-only command-line viewer for the Contacts databases on this Mac. It reads the local source databases directly in SQLite read-only mode; it does not automate Contacts.app, sign in anywhere, or modify a contact.
 
-The default output is the ten newest named contacts, sorted by creation date with the newest first.
+The default output is the ten newest named contacts from currently active sources, sorted by each record's creation date with the newest first. Creation dates can reflect an import or sync rather than when a person was first added.
 
 ```sh
 contactsls
@@ -34,6 +34,7 @@ contactsls --sort created --oldest
 | `--all` | Print every matching contact, ignoring `--limit`. |
 | `--oldest` | Reverse the selected order. |
 | `--fields LIST` | Choose comma-separated output columns: `name`, `created`, `modified`, `organization`, `emails`, `phones`, `notes`, `source`, or a location field below. |
+| `--historical-sources` | Include inactive source databases still on disk, for historical research. Cards are not merged or matched. |
 | `--details` | Shorthand for all contact fields, including `notes`. |
 | `--format table\|tsv\|json` | Select human-readable, tab-separated, or JSON output. |
 | `--match TEXT` | Case-insensitive filter over name, organization, email, and phone data. |
@@ -45,6 +46,7 @@ contactsls --sort created --oldest
 Supply an exported Google Maps `location-history.json` file with `--timeline PATH`, or set `CONTACTSLS_TIMELINE` to its path. The file is read locally. Location fields describe where **you** were when the contact was created, not assertions about where you met.
 
 The importer supports both the current iPhone top-level segment-array export and older exports wrapped in `semanticSegments`. By default, `location` prints the matched coordinates. Add `--location` to reverse-geocode them into a readable place or address.
+
 
 ```sh
 contactsls --timeline ~/Downloads/location-history.json \
@@ -69,7 +71,7 @@ Run `contactsls --help` for the same information with examples.
 
 `contactsls` reads the Contacts Core Data SQLite stores that macOS keeps under `~/Library/Application Support/AddressBook/Sources/`. This is an internal macOS data format, not a public Apple API; the command discovers the available schema at runtime and opens each database using SQLite read-only mode.
 
-The optional `--location` switch runs the bundled Swift/Core Location helper. It sends the matched coordinates to Apple's reverse-geocoding service and therefore may require network access. Without that flag, the command does not make network requests: Contacts data and the Google Timeline export remain local. A source installation needs the `swift` command for this option; the Homebrew formula compiles the helper during installation.
+The active-source helper uses Apple's Contacts framework and may request Contacts permission. Source installations need Swift; Homebrew compiles the helper during installation. The optional `--location` switch sends matched coordinates to Apple's reverse-geocoding service. Without that flag, the command does not make network requests.
 
 ## Homebrew installation
 

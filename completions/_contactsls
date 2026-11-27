@@ -21,6 +21,7 @@ _contactsls() {
     '--format[output format]:output format:(table tsv json)' \
     '--match[case-insensitive contact filter]:text:' \
     '--include-unnamed[include contacts without a visible name or organization]' \
+    '--historical-sources[include inactive source databases]' \
     '*--db[Contacts database to read]:Contacts database:_contactsls_databases' \
     '--timeline[Google Maps location-history.json]:Timeline file:_files' \
     '--location[reverse-geocode matched coordinates with Apple Maps]' \

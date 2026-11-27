@@ -2,6 +2,8 @@
 
 `contactsls` is a read-only command-line viewer for the local macOS Contacts databases. By default it prints the ten most recently created named contacts.
 
+By default it reads only active Contacts account sources. Use `--historical-sources` to include inactive databases left on disk; these may contain older timestamps, but are not automatically matched or merged.
+
 ```sh
 contactsls
 contactsls --sort modified -n 25 --fields name,modified,emails
@@ -39,7 +41,7 @@ Make sure `~/.local/bin` is in `PATH`, and add `~/.zfunc` to Zsh's `fpath` befor
 
 The Contacts adapter is macOS-specific: it discovers the per-source Contacts Core Data SQLite stores under `~/Library/Application Support/AddressBook/Sources/` and opens them with SQLite `mode=ro`. Those internal schemas can change with macOS, so `contactsls` intentionally discovers the relevant entities and columns at runtime.
 
-`--timeline` reads a Google Timeline export from disk; it does not upload the file. `--location` is the sole networked operation: it asks Apple to reverse-geocode the coordinates matched from that local export. The rest of the command, including normal contact listing, stays local and read-only. Source installations need the `swift` command for `--location`; the Homebrew formula compiles that helper during installation.
+`--timeline` reads a Google Timeline export from disk; it does not upload the file. `--location` is the sole networked operation: it asks Apple to reverse-geocode the coordinates matched from that local export. The rest of the command stays local and read-only. Source installations need Swift to discover active sources and for `--location`; the Homebrew formula compiles both helpers.
 
 ## Releases and visibility
 

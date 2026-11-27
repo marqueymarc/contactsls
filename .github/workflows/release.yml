@@ -27,6 +27,7 @@ jobs:
           python3 -m py_compile contactsls
           python3 -m unittest discover -s tests -v
           swiftc -typecheck helpers/reverse-geocode.swift
+          swiftc -typecheck helpers/active-sources.swift
           ./contactsls --help >/dev/null
           test "$(./contactsls --version)" = "contactsls ${TAG#v}"
       - name: Create the GitHub Release

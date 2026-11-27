@@ -3,6 +3,8 @@ import importlib.util
 import sqlite3
 import sys
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 from pathlib import Path
 
 path = Path(__file__).resolve().parents[1] / "contactsls"
@@ -14,6 +16,17 @@ loader.exec_module(module)
 
 
 class RelationshipTests(unittest.TestCase):
+    def test_active_source_filter_and_historical_override(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for source in ('ACTIVE', 'OLD'):
+                (root / source).mkdir()
+                (root / source / 'AddressBook-v22.abcddb').touch()
+            with patch.object(module, 'CONTACTS_ROOT', root), patch.object(module.subprocess, 'run', return_value=SimpleNamespace(stdout='ACTIVE:ABAccount\n')):
+                self.assertEqual([p.parent.name for p in module.database_paths(None)], ['ACTIVE'])
+                self.assertEqual({p.parent.name for p in module.database_paths(None, True)}, {'ACTIVE', 'OLD'})
+
     def test_entity_discriminator_is_not_contact_id(self):
         db = sqlite3.connect(":memory:")
         db.execute("CREATE TABLE ZABCDEMAILADDRESS (Z_PK INTEGER, ZOWNER INTEGER, Z22_OWNER INTEGER, ZADDRESS TEXT)")
