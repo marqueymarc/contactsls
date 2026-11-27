@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as dt
+import difflib
 import json
 import os
 import re
@@ -29,10 +30,10 @@ from typing import Iterable
 
 
 CONTACTS_ROOT = Path.home() / "Library/Application Support/AddressBook/Sources"
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 CORE_DATA_EPOCH = dt.datetime(2001, 1, 1, tzinfo=dt.timezone.utc)
 DEFAULT_FIELDS = ("name", "created")
-DETAIL_FIELDS = ("name", "created", "modified", "organization", "emails", "phones", "notes", "source")
+DETAIL_FIELDS = ("name", "created", "record_created", "creation_source", "modified", "organization", "emails", "phones", "notes", "source")
 LOCATION_FIELDS = ("location", "location_time", "location_delta", "location_confidence", "location_kind", "location_coordinates", "location_link")
 VALID_FIELDS = set(DETAIL_FIELDS + LOCATION_FIELDS)
 
@@ -48,6 +49,8 @@ class Contact:
     notes: str
     source: str
     location: "TimelineLocation | None" = None
+    record_created: dt.datetime | None = None
+    creation_source: str = ""
 
     def value(self, field: str, location_style: str = "summary") -> str:
         if field in LOCATION_FIELDS:
@@ -396,7 +399,50 @@ def read_database(path: Path) -> Iterable[Contact]:
                 phones=labelled_values(connection, "ZABCDPHONENUMBER", "ZFULLNUMBER", identifier),
                 notes=contact_notes(connection, identifier),
                 source=path.parent.name,
+                record_created=coredatetime(created),
+                creation_source=path.parent.name,
             )
+
+
+def identity_keys(contact: Contact) -> set[str]:
+    keys = set()
+    for value in contact.emails:
+        keys.update("email:" + email.casefold() for email in re.findall(r"[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}", value))
+    for value in contact.phones:
+        digits = re.sub(r"\D", "", value)
+        if len(digits) == 11 and digits.startswith("1"):
+            digits = digits[1:]
+        if len(digits) >= 10:
+            keys.add("phone:" + digits)
+    return keys
+
+
+def comparable_name(name: str) -> str:
+    return " ".join(sorted(re.findall(r"[^\W_]+", name.casefold())))
+
+
+def apply_earliest_dates(contacts: list[Contact], evidence: list[Contact]) -> list[Contact]:
+    index: dict[str, list[Contact]] = {}
+    for contact in evidence:
+        if comparable_name(contact.name):
+            for key in identity_keys(contact):
+                index.setdefault(key, []).append(contact)
+    result = []
+    for contact in contacts:
+        name = comparable_name(contact.name)
+        candidates = []
+        for key in identity_keys(contact):
+            group = index.get(key, [])
+            # A shared household number or common address is not safe evidence.
+            if not name or any(difflib.SequenceMatcher(None, name, comparable_name(other.name)).ratio() < 0.85 for other in group):
+                continue
+            candidates.extend(other for other in group if other.created is not None)
+        if candidates:
+            earliest = min(candidates, key=lambda item: item.created)
+            if contact.created is None or earliest.created < contact.created:
+                contact = replace(contact, created=earliest.created, creation_source=earliest.source)
+        result.append(contact)
+    return result
 
 
 def sort_contacts(contacts: list[Contact], criterion: str, oldest: bool) -> list[Contact]:
@@ -448,6 +494,12 @@ def main() -> int:
         print("No AddressBook-v22.abcddb source databases found.", file=sys.stderr)
         return 1
     contacts = [contact for path in paths for contact in read_database(path)]
+    if args.sort == "created":
+        # Explicit --db stays scoped to the user's selected files.
+        historical_paths = database_paths(args.db, True)
+        extra_paths = [path for path in historical_paths if path not in paths]
+        evidence = contacts + [contact for path in extra_paths for contact in read_database(path)]
+        contacts = apply_earliest_dates(contacts, evidence)
     if args.timeline:
         try:
             locations = timeline_locations(args.timeline)

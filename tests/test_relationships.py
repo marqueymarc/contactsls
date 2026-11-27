@@ -3,6 +3,8 @@ import importlib.util
 import sqlite3
 import sys
 import unittest
+import datetime as dt
+from dataclasses import replace
 from unittest.mock import patch
 from types import SimpleNamespace
 from pathlib import Path
@@ -16,6 +18,19 @@ loader.exec_module(module)
 
 
 class RelationshipTests(unittest.TestCase):
+    def test_earliest_date_requires_unambiguous_identifier_and_name(self):
+        early = dt.datetime(2020, 1, 1, tzinfo=dt.timezone.utc)
+        late = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+        current = module.Contact('Leonor Blum', late, late, '', (), ('mobile: (410) 591-0547',), '', 'new', record_created=late, creation_source='new')
+        old = replace(current, name='Leonore Blum', created=early, phones=('mobile: +1 (410) 591-0547',), source='old')
+        result = module.apply_earliest_dates([current], [current, old])[0]
+        self.assertEqual(result.created, early)
+        self.assertEqual(result.record_created, late)
+        self.assertEqual(result.creation_source, 'old')
+        shared = replace(old, name='Other Person')
+        self.assertEqual(module.apply_earliest_dates([current], [current, old, shared])[0].created, late)
+        self.assertEqual(module.apply_earliest_dates([replace(current, phones=())], [old])[0].created, late)
+
     def test_active_source_filter_and_historical_override(self):
         import tempfile
         with tempfile.TemporaryDirectory() as directory:

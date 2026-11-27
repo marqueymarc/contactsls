@@ -2,7 +2,8 @@
 
 `contactsls` is a read-only command-line viewer for the local macOS Contacts databases. By default it prints the ten most recently created named contacts.
 
-By default it reads only active Contacts account sources. Use `--historical-sources` to include inactive databases left on disk; these may contain older timestamps, but are not automatically matched or merged.
+By default it displays only active Contacts account sources. Use `--historical-sources` to display inactive databases left on disk as well.
+When sorting by creation date, it checks older sources for a matching email or phone and similar name and uses the earliest known timestamp; this is a heuristic and can itself be an import date. Cards remain separate.
 
 ```sh
 contactsls

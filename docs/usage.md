@@ -2,7 +2,7 @@
 
 `contactsls` is a read-only command-line viewer for the Contacts databases on this Mac. It reads the local source databases directly in SQLite read-only mode; it does not automate Contacts.app, sign in anywhere, or modify a contact.
 
-The default output is the ten newest named contacts from currently active sources, sorted by each record's creation date with the newest first. Creation dates can reflect an import or sync rather than when a person was first added.
+The default output is the ten newest named contacts from currently active sources, sorted by the earliest known creation date, newest first. For creation sorting, the command checks active and inactive sources for an exact email address or normalized phone number with a closely matching name. If that identifier is shared with a substantially different name, it is not used. Matching is heuristic, not proof of identity; cards are never merged. Dates may reflect an import or sync rather than when a person was first added.
 
 ```sh
 contactsls
@@ -33,7 +33,7 @@ contactsls --sort created --oldest
 | `-n`, `--limit N` | Print at most `N` contacts. The default is 10. |
 | `--all` | Print every matching contact, ignoring `--limit`. |
 | `--oldest` | Reverse the selected order. |
-| `--fields LIST` | Choose comma-separated output columns: `name`, `created`, `modified`, `organization`, `emails`, `phones`, `notes`, `source`, or a location field below. |
+| `--fields LIST` | Choose comma-separated output columns: `name`, `created`, `record_created`, `creation_source`, `modified`, `organization`, `emails`, `phones`, `notes`, `source`, or a location field below. `created` is the earliest known match when sorting by creation; `record_created` and `source` describe the displayed card, and `creation_source` identifies the source of the chosen date. |
 | `--historical-sources` | Include inactive source databases still on disk, for historical research. Cards are not merged or matched. |
 | `--details` | Shorthand for all contact fields, including `notes`. |
 | `--format table\|tsv\|json` | Select human-readable, tab-separated, or JSON output. |
@@ -44,6 +44,8 @@ contactsls --sort created --oldest
 ## Contact-creation location
 
 Supply an exported Google Maps `location-history.json` file with `--timeline PATH`, or set `CONTACTSLS_TIMELINE` to its path. The file is read locally. Location fields describe where **you** were when the contact was created, not assertions about where you met.
+
+When sorting by creation, Timeline matches use the earliest known timestamp, which may be an import time or a heuristic match; treat any inferred location accordingly.
 
 The importer supports both the current iPhone top-level segment-array export and older exports wrapped in `semanticSegments`. By default, `location` prints the matched coordinates. Add `--location` to reverse-geocode them into a readable place or address.
 
